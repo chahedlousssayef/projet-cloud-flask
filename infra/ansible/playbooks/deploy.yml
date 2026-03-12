@@ -1,0 +1,7 @@
+---
+# Déploiement : cloner le repo, générer .env, lancer les conteneurs
+- name: Deploy Flask application
+  hosts: all
+  become: true
+  roles:
+    - deploy-stack

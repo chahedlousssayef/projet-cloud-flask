@@ -1,0 +1,16 @@
+---
+- name: Create app directory
+  file:
+    path: "{{ app_home }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+
+- name: Ensure .ssh directory exists
+  file:
+    path: "{{ app_home }}/.ssh"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0700"

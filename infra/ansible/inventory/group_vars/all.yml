@@ -1,0 +1,5 @@
+---
+app_home: /home/{{ ansible_user }}/app
+postgres_host: postgres
+postgres_port: 5432
+flask_port: 5000

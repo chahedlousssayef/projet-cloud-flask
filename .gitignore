@@ -1,0 +1,14 @@
+.env
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+terraform.tfvars
+*.tfplan
+infra/ansible/inventory/hosts.yml
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.log
+.DS_Store

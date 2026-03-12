@@ -1,0 +1,31 @@
+# Copier vers terraform.tfvars et remplir les valeurs.
+# terraform.tfvars ne doit pas être commité (ajouté à .gitignore).
+
+subscription_id = "VOTRE-SUBSCRIPTION-ID-AZURE"
+
+# Région (une parmi: swedencentral, polandcentral, norwayeast, germanywestcentral, spaincentral)
+location = "germanywestcentral"
+
+resource_group_name = "rg-flask-app"
+vm_name             = "vm-flask-app"
+vm_size             = "Standard_B2s_v2"
+admin_username      = "votre-username"
+ssh_public_key_path  = "~/.ssh/id_rsa.pub"
+ssh_private_key_path = "~/.ssh/id_rsa"
+
+# Storage account : nom unique dans tout Azure (3-24 caractères alphanumériques)
+# Exemple : saflaskappvosinitiales2026
+storage_account_name   = "saflaskappVOSINITIALES2026"
+storage_container_name = "flask-files"
+
+# PostgreSQL (Docker sur la VM)
+postgres_user     = "postgres"
+postgres_password = "VotreMotDePasseSecurise123!"
+postgres_db       = "flaskapp"
+
+# Application
+flask_port = 5000
+
+# Repo Git (remplacer par votre dépôt)
+repo_url    = "git@github.com:VOTRE-USERNAME/projet-cloud-flask.git"
+repo_branch = "main"

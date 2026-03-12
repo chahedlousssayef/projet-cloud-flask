@@ -1,0 +1,8 @@
+---
+# Bootstrap : installer Docker et Docker Compose sur la VM
+- name: Bootstrap VM
+  hosts: all
+  become: true
+  roles:
+    - common
+    - docker
