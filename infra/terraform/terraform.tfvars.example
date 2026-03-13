@@ -4,7 +4,7 @@
 subscription_id = "VOTRE-SUBSCRIPTION-ID-AZURE"
 
 # Région (une parmi: swedencentral, polandcentral, norwayeast, germanywestcentral, spaincentral)
-location = "germanywestcentral"
+location = "swedencentral"
 
 resource_group_name = "rg-flask-app"
 vm_name             = "vm-flask-app"
@@ -26,6 +26,6 @@ postgres_db       = "flaskapp"
 # Application
 flask_port = 5000
 
-# Repo Git (remplacer par votre dépôt)
-repo_url    = "git@github.com:VOTRE-USERNAME/projet-cloud-flask.git"
+# Repo Git (HTTPS pour un repo public, SSH pour un repo privé avec deploy key)
+repo_url    = "https://github.com/VOTRE-USERNAME/projet-cloud-flask.git"
 repo_branch = "main"

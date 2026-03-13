@@ -2,7 +2,6 @@ const API = '/api';
 const DIGITS = ['0','1','2','3','4','5','6','7','8','9'];
 const digitImages = {};
 
-// ── Toast ────────────────────────────────────────────
 function toast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -11,7 +10,6 @@ function toast(msg) {
   t._timer = setTimeout(() => t.classList.remove('show'), 2800);
 }
 
-// ── Backend status ───────────────────────────────────
 async function checkHealth() {
   const el = document.getElementById('statusDot');
   try {
@@ -27,7 +25,6 @@ async function checkHealth() {
   return false;
 }
 
-// ── Digit grid ───────────────────────────────────────
 function buildGrid() {
   const grid = document.getElementById('digitGrid');
   DIGITS.forEach(d => {
@@ -46,7 +43,6 @@ function buildGrid() {
   });
 }
 
-// ── Load existing digit images ───────────────────────
 async function loadDigits() {
   try {
     const res = await fetch(`${API}/clock/digits`);
@@ -69,7 +65,6 @@ function updateThumb(digit) {
   }
 }
 
-// ── Upload ───────────────────────────────────────────
 async function uploadDigit(digit, input) {
   if (!input.files.length) return;
   const fd = new FormData();
@@ -86,7 +81,6 @@ async function uploadDigit(digit, input) {
   input.value = '';
 }
 
-// ── Delete ───────────────────────────────────────────
 async function deleteDigit(digit) {
   try {
     const res = await fetch(`${API}/clock/digits/${digit}`, { method: 'DELETE' });
@@ -99,7 +93,6 @@ async function deleteDigit(digit) {
   }
 }
 
-// ── Clock tick ───────────────────────────────────────
 function updateClock() {
   const now = new Date();
   const h = String(now.getHours()).padStart(2, '0');
@@ -134,7 +127,6 @@ function updateClock() {
   }
 }
 
-// ── Smooth scroll for nav ────────────────────────────
 document.querySelectorAll('.nav-links a').forEach(link => {
   link.addEventListener('click', () => {
     document.querySelectorAll('.nav-links a').forEach(l => l.classList.remove('active'));
@@ -142,7 +134,6 @@ document.querySelectorAll('.nav-links a').forEach(link => {
   });
 });
 
-// ── Init ─────────────────────────────────────────────
 buildGrid();
 checkHealth();
 setInterval(checkHealth, 30000);

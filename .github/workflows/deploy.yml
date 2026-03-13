@@ -1,4 +1,3 @@
-# CI/CD : déploiement sur la VM Azure après push sur main
 name: Deploy to Azure VM
 
 on:

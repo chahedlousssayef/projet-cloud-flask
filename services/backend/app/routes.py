@@ -21,8 +21,6 @@ def register_routes(app):
             "api": "/api",
         })
 
-    # ── Clock digit image routes ─────────────────────────────
-
     @app.route("/api/clock/digits", methods=["GET"])
     def list_digit_images():
         _, container = get_blob_client()
@@ -92,8 +90,6 @@ def register_routes(app):
             except Exception:
                 pass
         return "", 204
-
-    # ── API info ─────────────────────────────────────────────
 
     @app.route("/api")
     def api_index():

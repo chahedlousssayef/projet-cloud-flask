@@ -1,193 +1,227 @@
-# Flask sur Azure — Terraform, Ansible, GitHub Actions
+# Image Clock — Flask + Azure Blob Storage
 
-Application web **Flask** déployée sur **Microsoft Azure** : infrastructure avec **Terraform**, configuration avec **Ansible**, et déploiement continu via **GitHub Actions**.
+Horloge web dont les chiffres peuvent etre remplaces par des images stockees sur **Azure Blob Storage**.
+
+Un seul `terraform apply` cree toute l'infrastructure Azure, installe Docker sur la VM, et deploie l'application.
 
 ## Architecture
 
 ```
 Internet
-   │
-   ▼
-Azure Public IP
-   │
-   ├── :22   → SSH
-   ├── :5000 → Flask (API + CRUD + Azure Blob)
-   │
-   └── [VM Ubuntu 22.04 — Docker Compose]
-         ├── backend (Flask + Gunicorn)
-         └── postgres (PostgreSQL 16)
-
-Azure Blob Storage ◄── backend (fichiers des items)
+   |
+   v
+Azure VM (Ubuntu 22.04)
+   |
+   +-- :80   Nginx (frontend)  ---proxy /api/--->  Flask (backend)
+   +-- :5000 Flask (API directe)  ------------->  PostgreSQL
+   +-- :22   SSH                                  Azure Blob Storage
+   |
+   [Docker Compose : frontend + backend + postgres]
 ```
 
-## Stack
+## Prerequis
 
-| Composant     | Technologie                    |
-|---------------|--------------------------------|
-| Cloud         | Microsoft Azure                |
-| IaC           | Terraform (AzureRM ~4.55)      |
-| Provisioning  | Ansible 2.x                    |
-| Backend       | Flask, PostgreSQL, Azure Blob |
-| Conteneurs   | Docker + Docker Compose        |
-| CI/CD         | GitHub Actions (SSH deploy)   |
+Tous les outils doivent etre installes **sur votre machine locale** (pas sur la VM).
 
-## Prérequis
-
-- **Azure CLI** : `brew install azure-cli` puis `az login`
-- **Terraform** : `brew install terraform`
-- **Ansible** : `brew install ansible`  
-  Puis installer la collection Docker :  
-  `ansible-galaxy collection install community.docker`
-- **Clé SSH** : `~/.ssh/id_rsa` et `~/.ssh/id_rsa.pub`
-- **Régions autorisées** : `swedencentral`, `polandcentral`, `norwayeast`, `germanywestcentral`, `spaincentral`
-
-## Déploiement Azure (pas à pas)
-
-### 1. Cloner le projet
+### macOS
 
 ```bash
-git clone git@github.com:VOTRE-USERNAME/projet-cloud-flask.git
+brew install azure-cli terraform ansible
+```
+
+### Linux (Ubuntu/Debian)
+
+```bash
+# Azure CLI
+curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+
+# Terraform
+sudo apt-get update && sudo apt-get install -y gnupg software-properties-common
+wget -O- https://apt.releases.hashicorp.com/gpg | gpg --dearmor | sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg
+echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+sudo apt-get update && sudo apt-get install terraform
+
+# Ansible
+sudo apt-get install -y ansible
+```
+
+### Windows
+
+Utiliser **WSL 2** (Windows Subsystem for Linux) puis suivre les instructions Linux ci-dessus.
+
+```powershell
+# Installer WSL (PowerShell en admin)
+wsl --install
+# Puis ouvrir le terminal Ubuntu et suivre les etapes Linux
+```
+
+### Cle SSH
+
+Une paire de cles SSH **sans passphrase** est necessaire :
+
+```bash
+# Si vous n'avez pas de cle SSH ou si elle a une passphrase
+ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa -N ""
+```
+
+> Verifiez que `~/.ssh/id_rsa` et `~/.ssh/id_rsa.pub` existent avant de continuer.
+
+## Deploiement
+
+### Etape 1 — Cloner le repo
+
+```bash
+git clone https://github.com/chahedlousssayef/projet-cloud-flask.git
 cd projet-cloud-flask
 ```
 
-### 2. Connexion Azure
+### Etape 2 — Se connecter a Azure
 
 ```bash
 az login
-az account show --query id -o tsv   # copier le subscription_id
 ```
 
-### 3. Configurer Terraform
+Notez votre **subscription ID** :
+
+```bash
+az account show --query id -o tsv
+```
+
+### Etape 3 — Configurer les variables Terraform
 
 ```bash
 cd infra/terraform
 cp terraform.tfvars.example terraform.tfvars
 ```
 
-Éditer `terraform.tfvars` et renseigner au minimum :
+Ouvrir `terraform.tfvars` dans un editeur et remplir :
 
-- `subscription_id` (UUID Azure)
-- `location` : une parmi `swedencentral`, `polandcentral`, `norwayeast`, `germanywestcentral`, `spaincentral`
-- `admin_username`
-- `storage_account_name` (unique globalement, ex. `saflaskappvosinitiales2026`)
-- `postgres_password`
-- `repo_url` : `git@github.com:VOTRE-USERNAME/projet-cloud-flask.git`
+| Variable               | Quoi mettre                                                    |
+|------------------------|----------------------------------------------------------------|
+| `subscription_id`      | L'UUID recupere a l'etape 2                                    |
+| `admin_username`       | Un nom d'utilisateur pour la VM (ex: `azureuser`)              |
+| `storage_account_name` | Un nom unique dans Azure, 3-24 caracteres, minuscules (ex: `saflaskjean2026`) |
+| `postgres_password`    | Un mot de passe fort pour PostgreSQL                           |
+| `repo_url`             | `https://github.com/chahedlousssayef/projet-cloud-flask.git`  |
 
-### 4. Deploy key GitHub
+Les autres variables ont des valeurs par defaut qui fonctionnent telles quelles.
 
-Pour que la VM clone le repo, ajoutez votre clé publique en **Deploy key** (avec accès en écriture) :
+> **Regions disponibles** : `swedencentral` (defaut), `polandcentral`, `norwayeast`, `germanywestcentral`, `spaincentral`
 
-- GitHub → Settings → Deploy keys → Add deploy key
-- Coller le contenu de `~/.ssh/id_rsa.pub`
-
-### 5. Lancer l’infrastructure
+### Etape 4 — Deployer (terraform init / plan / apply)
 
 ```bash
-terraform init
-terraform plan
-terraform apply   # confirmer par yes
+terraform init    # Telecharge les providers Azure, time, local, null
+terraform plan    # Affiche ce qui va etre cree (verification)
+terraform apply   # Cree tout — confirmer par "yes"
 ```
 
-Terraform crée le resource group, le réseau, la VM, le Blob Storage, puis Ansible installe Docker, clone le repo, génère le `.env` et lance Docker Compose. Comptez environ 5 minutes.
+Le deploiement prend environ **5 minutes**. Terraform va :
+1. Creer les ressources Azure (Resource Group, VNet, NSG, IP, VM, Blob Storage)
+2. Lancer Ansible automatiquement pour configurer la VM
+3. Installer Docker et Docker Compose sur la VM
+4. Cloner ce repo sur la VM
+5. Generer le fichier `.env` de production
+6. Lancer `docker compose` (frontend + backend + postgres)
+7. Verifier que tout repond correctement
 
-### 6. Sorties Terraform
+### Etape 5 — Recuperer les URLs
 
 ```bash
 terraform output
 ```
 
-- `app_url` / `flask_url` : accès à l’API
-- `ssh_command` : connexion SSH à la VM
+Vous obtiendrez :
 
-### 7. Configurer GitHub Actions (CI/CD)
+```
+frontend_url        = "http://<IP>"          # Ouvrir dans le navigateur
+api_url             = "http://<IP>:5000"     # API Flask directe
+ssh_command         = "ssh <user>@<IP>"      # Connexion SSH a la VM
+vm_public_ip        = "<IP>"
+```
 
-Dans le dépôt GitHub → Settings → Secrets and variables → Actions, ajouter :
-
-| Secret              | Valeur                    |
-|---------------------|---------------------------|
-| `VM_HOST`           | IP publique de la VM      |
-| `VM_USERNAME`       | Valeur de `admin_username`|
-| `VM_SSH_PRIVATE_KEY`| Contenu de `~/.ssh/id_rsa`|
-
-À chaque push sur `main`, le workflow déploie sur la VM (SSH + `./deploy.sh`).
-
-### 8. Tests
+### Etape 6 — Tester
 
 ```bash
-# Santé
+# Ouvrir le frontend dans le navigateur
+open http://$(terraform output -raw vm_public_ip)         # macOS
+xdg-open http://$(terraform output -raw vm_public_ip)     # Linux
+
+# Tester l'API
 curl http://$(terraform output -raw vm_public_ip):5000/health
+# -> {"status":"ok"}
 
-# CRUD
-curl -X POST http://$(terraform output -raw vm_public_ip):5000/api/items \
-  -H "Content-Type: application/json" \
-  -d '{"title": "Test", "description": "Item test"}'
-
-curl http://$(terraform output -raw vm_public_ip):5000/api/items
+curl http://$(terraform output -raw vm_public_ip):5000/api/clock/digits
+# -> liste des digits de l'horloge
 ```
 
-### 9. Détruire l’infrastructure
+### Detruire l'infrastructure
 
 ```bash
-terraform destroy
+terraform destroy   # confirmer par "yes"
 ```
 
-Répondre `yes` à la confirmation.
+Cela supprime **toutes** les ressources Azure creees.
 
-**Valider le déploiement** (depuis la racine du repo) :
-```bash
-./scripts/test-api.sh $(cd infra/terraform && terraform output -raw vm_public_ip)
-```
-Voir aussi **[docs/TESTS.md](docs/TESTS.md)** pour les commandes de test détaillées (CRUD, Blob, santé).
-
-## Déploiement local (dev)
+## Dev local (sans Azure)
 
 ```bash
-cp .env.example .env   # remplir PostgreSQL et optionnellement Azure Blob
-docker compose -f infra/docker/compose.prod.yml up --build
-# API : http://localhost:5000
+cp .env.example .env    # remplir POSTGRES_PASSWORD et AZURE_STORAGE_CONNECTION_STRING
+docker compose -f infra/docker/compose.prod.yml --env-file .env up --build
+# Frontend : http://localhost
+# API      : http://localhost:5000
 ```
 
 ## Endpoints API
 
-| Méthode | Endpoint                      | Description        |
-|---------|-------------------------------|--------------------|
-| GET     | /health                       | Santé              |
-| GET     | /api/items                    | Liste des items    |
-| POST    | /api/items                    | Créer un item      |
-| GET     | /api/items/:id                | Détail item        |
-| PATCH   | /api/items/:id                | Modifier item      |
-| DELETE  | /api/items/:id                | Supprimer item     |
-| POST    | /api/items/:id/files          | Upload fichier     |
-| GET     | /api/items/:id/files/:blob    | Télécharger fichier|
-| DELETE  | /api/items/:id/files/:blob    | Supprimer fichier  |
+| Methode | Endpoint                     | Description             |
+|---------|------------------------------|-------------------------|
+| GET     | /health                      | Sante                   |
+| GET     | /api/items                   | Lister les items        |
+| POST    | /api/items                   | Creer un item           |
+| GET     | /api/items/:id               | Detail d'un item        |
+| PATCH   | /api/items/:id               | Modifier un item        |
+| DELETE  | /api/items/:id               | Supprimer un item       |
+| POST    | /api/items/:id/files         | Upload fichier Blob     |
+| GET     | /api/items/:id/files/:blob   | Telecharger fichier     |
+| DELETE  | /api/items/:id/files/:blob   | Supprimer fichier       |
+| GET     | /api/clock/digits            | Lister les digits       |
+| POST    | /api/clock/digits/:d         | Upload image pour digit |
+| GET     | /api/clock/digits/:d/image   | Recuperer image digit   |
+| DELETE  | /api/clock/digits/:d         | Supprimer image digit   |
 
 ## Structure du projet
 
 ```
-/
-├── services/backend/          # Flask (CRUD + Blob)
-├── infra/
-│   ├── terraform/             # VM, VNet, NSG, Blob Storage
-│   ├── ansible/               # Bootstrap + déploiement (Docker, clone, compose)
-│   └── docker/
-│       └── compose.prod.yml    # Backend + PostgreSQL
-├── .github/workflows/
-│   └── deploy.yml             # CI/CD GitHub Actions
-├── deploy.sh                  # Script de déploiement (VM + Actions)
-├── docs/
-│   └── TESTS.md               # Commandes de test manuelles (curl)
-├── scripts/
-│   └── test-api.sh            # Script de validation (health + CRUD)
-├── .env.example
-└── README.md
+projet-cloud-flask/
++-- services/
+|   +-- backend/            # Flask + Gunicorn
+|   |   +-- app/routes.py   # Tous les endpoints
+|   |   +-- Dockerfile
+|   +-- frontend/           # Nginx + HTML/JS/CSS
+|       +-- nginx.conf      # Reverse proxy /api/ -> backend
+|       +-- Dockerfile
++-- infra/
+|   +-- terraform/          # Infrastructure Azure
+|   |   +-- main.tf         # Ressources + provisioner Ansible
+|   |   +-- variables.tf    # Variables configurables
+|   |   +-- outputs.tf      # URLs de sortie
+|   +-- ansible/            # Configuration de la VM
+|   |   +-- roles/common/   # Repertoires
+|   |   +-- roles/docker/   # Installation Docker
+|   |   +-- roles/deploy-stack/  # Clone + compose up
+|   +-- docker/
+|       +-- compose.prod.yml
++-- .env.example            # Template variables d'environnement
++-- terraform.tfvars.example # Template variables Terraform
 ```
 
-## Dépannage
+## Depannage
 
-- **Quota / Sku non disponible** : changer `location` ou `vm_size` dans `terraform.tfvars`.
-- **Échec clone Git sur la VM** : vérifier la deploy key (écriture) et que la clé privée a bien été copiée par Ansible.
-- **GitHub Actions échoue** : vérifier les secrets `VM_HOST`, `VM_USERNAME`, `VM_SSH_PRIVATE_KEY`.
-
-## Licence
-
-MIT
+| Probleme | Solution |
+|----------|----------|
+| `SkuNotAvailable` a l'apply | Changer `location` ou `vm_size` dans terraform.tfvars |
+| `permission denied` docker | Relancer `terraform apply` (le reset_connection regle ca) |
+| Postgres crash en boucle | Le `--env-file .env` est deja configure, verifier que .env est genere |
+| Ansible timeout / unreachable | La VM met ~30s a demarrer, relancer `terraform taint null_resource.ansible && terraform apply` |
+| Erreur SSH passphrase | Regenerer la cle : `ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa -N ""` |

@@ -1,16 +1,13 @@
-# Resource Group
 resource "azurerm_resource_group" "rg" {
   name     = var.resource_group_name
   location = var.location
 }
 
-# Attente pour la propagation Azure API
 resource "time_sleep" "wait_for_rg" {
   depends_on      = [azurerm_resource_group.rg]
   create_duration = "30s"
 }
 
-# Réseau virtuel
 resource "azurerm_virtual_network" "vnet" {
   name                = "vnet-flask-app"
   address_space       = ["10.0.0.0/16"]
@@ -19,7 +16,6 @@ resource "azurerm_virtual_network" "vnet" {
   depends_on          = [time_sleep.wait_for_rg]
 }
 
-# Subnet
 resource "azurerm_subnet" "subnet" {
   name                 = "subnet-flask-app"
   resource_group_name  = azurerm_resource_group.rg.name
@@ -27,7 +23,6 @@ resource "azurerm_subnet" "subnet" {
   address_prefixes     = ["10.0.1.0/24"]
 }
 
-# IP publique
 resource "azurerm_public_ip" "pip" {
   name                = "pip-flask-app"
   location            = azurerm_resource_group.rg.location
@@ -37,7 +32,6 @@ resource "azurerm_public_ip" "pip" {
   depends_on          = [time_sleep.wait_for_rg]
 }
 
-# Groupe de sécurité réseau (NSG)
 resource "azurerm_network_security_group" "nsg" {
   name                = "nsg-flask-app"
   location            = azurerm_resource_group.rg.location
@@ -81,7 +75,6 @@ resource "azurerm_network_security_group" "nsg" {
   }
 }
 
-# Interface réseau
 resource "azurerm_network_interface" "nic" {
   name                = "nic-flask-app"
   location            = azurerm_resource_group.rg.location
@@ -91,17 +84,15 @@ resource "azurerm_network_interface" "nic" {
     name                          = "internal"
     subnet_id                     = azurerm_subnet.subnet.id
     private_ip_address_allocation = "Dynamic"
-    public_ip_address_id           = azurerm_public_ip.pip.id
+    public_ip_address_id          = azurerm_public_ip.pip.id
   }
 }
 
-# Association NSG / NIC
 resource "azurerm_network_interface_security_group_association" "nic_nsg" {
   network_interface_id      = azurerm_network_interface.nic.id
   network_security_group_id = azurerm_network_security_group.nsg.id
 }
 
-# Machine virtuelle Ubuntu 22.04
 resource "azurerm_linux_virtual_machine" "vm" {
   name                = var.vm_name
   resource_group_name = azurerm_resource_group.rg.name
@@ -131,7 +122,6 @@ resource "azurerm_linux_virtual_machine" "vm" {
   }
 }
 
-# Stockage Azure Blob
 resource "azurerm_storage_account" "storage" {
   name                            = var.storage_account_name
   resource_group_name             = azurerm_resource_group.rg.name
@@ -149,19 +139,23 @@ resource "azurerm_storage_container" "container" {
   container_access_type = "private"
 }
 
-# Fichier inventory généré (optionnel, pour Ansible local)
 resource "local_file" "inventory" {
   content = templatefile("${path.module}/templates/inventory.tpl", {
-    vm_public_ip = azurerm_linux_virtual_machine.vm.public_ip_address
-    admin_user   = var.admin_username
+    vm_public_ip         = azurerm_linux_virtual_machine.vm.public_ip_address
+    admin_user           = var.admin_username
+    ssh_private_key_path = pathexpand(var.ssh_private_key_path)
   })
   filename = "${path.module}/../ansible/inventory/hosts.yml"
 }
 
-# Provisioning Ansible après création de la VM
+resource "time_sleep" "wait_for_vm" {
+  depends_on      = [azurerm_linux_virtual_machine.vm]
+  create_duration = "30s"
+}
+
 resource "null_resource" "ansible" {
   depends_on = [
-    azurerm_linux_virtual_machine.vm,
+    time_sleep.wait_for_vm,
     azurerm_storage_account.storage,
     azurerm_storage_container.container,
     local_file.inventory,
@@ -173,9 +167,8 @@ resource "null_resource" "ansible" {
 
   provisioner "local-exec" {
     command = <<-EOT
-      sleep 30
-      cd ${path.module}/../ansible && \
-      ansible-playbook -i inventory/hosts.yml playbooks/bootstrap.yml playbooks/deploy.yml \
+      ansible-playbook -i inventory/hosts.yml \
+        playbooks/bootstrap.yml playbooks/deploy.yml \
         -e "storage_account_name=${azurerm_storage_account.storage.name}" \
         -e "storage_account_key=${azurerm_storage_account.storage.primary_access_key}" \
         -e "storage_container_name=${azurerm_storage_container.container.name}" \
@@ -184,9 +177,10 @@ resource "null_resource" "ansible" {
         -e "postgres_db=${var.postgres_db}" \
         -e "repo_url=${var.repo_url}" \
         -e "repo_branch=${var.repo_branch}" \
-        -e "ssh_private_key_path=${pathexpand(var.ssh_private_key_path)}" \
         --private-key=${pathexpand(var.ssh_private_key_path)}
     EOT
+    interpreter = ["bash", "-c"]
+    working_dir = "${path.module}/../ansible"
     environment = {
       ANSIBLE_HOST_KEY_CHECKING = "False"
     }

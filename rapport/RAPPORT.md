@@ -1,146 +1,146 @@
-# Rapport du projet — Déploiement automatisé Flask sur Azure
+# Rapport — Image Clock sur Azure
 
-## 1. Introduction
+**Projet** : Application web Image Clock deployee sur Azure avec Terraform et Ansible
 
-- **Objectif** : Déployer une application web Flask sur une machine virtuelle Azure avec stockage Blob et base PostgreSQL, en automatisant l’infrastructure (Terraform), la configuration (Ansible) et le déploiement continu (GitHub Actions).
-- **Périmètre** : VM Ubuntu 22.04, Azure Blob Storage, PostgreSQL 16 dans Docker, API Flask (CRUD + fichiers statiques : images, logs).
+## 1. Presentation
 
----
+Horloge web dont les chiffres peuvent etre remplaces par des images. Les images sont stockees sur Azure Blob Storage. Toute l'infrastructure est automatisee : un `terraform apply` cree la VM, installe Docker, deploie l'app.
 
-## 2. Étapes réalisées
+**Stack** : Flask, PostgreSQL, Nginx, Docker Compose, Terraform, Ansible, Azure.
 
-### 2.1 Environnement Terraform
+## 2. Infrastructure
 
-- **Fichiers** : `provider.tf`, `main.tf`, `variables.tf`, `outputs.tf`, `terraform.tfvars.example`.
-- **Provider** : Azure (azurerm ~4.55), version Terraform >= 1.0.
-- **Régions utilisées** : parmi `swedencentral`, `polandcentral`, `norwayeast`, `germanywestcentral`, `spaincentral`.
+### 2.1 Terraform init
 
-**Commandes à exécuter pour valider :**
+Telecharge les providers necessaires (azurerm, time, local, null).
+
 ```bash
 cd infra/terraform
 terraform init
-terraform validate
 ```
 
-*[À compléter : capture d’écran de la structure des fichiers Terraform et/ou de `terraform init` / `terraform validate`.]*
+![terraform init](./images/terraform%20init.png)
 
-### 2.2 Déploiement de l’infrastructure
+### 2.2 Terraform plan
 
-- **VM** : Ubuntu 22.04 LTS (Canonical), IP publique statique, NSG (SSH 22, HTTP 80, Flask 5000).
-- **Stockage** : Compte de stockage Azure (Standard LRS, TLS 1.2) + conteneur Blob privé `flask-files` pour images, logs et fichiers applicatifs.
-- **Base de données** : PostgreSQL 16 (Alpine) dans un conteneur Docker sur la VM, avec healthcheck.
-
-**Commandes :** `terraform plan` puis `terraform apply` (confirmer par yes), puis `terraform output`.
-
-*[À compléter : capture d’écran de `terraform plan` / `terraform apply` et des outputs.]*
-
-### 2.3 Backend Flask
-
-- **Technologie** : Flask, Gunicorn, connexion PostgreSQL, SDK Azure Blob.
-- **Fonctionnalités** : CRUD sur des “items”, upload/download/suppression de fichiers dans Blob, métadonnées en base.
-
-*[À compléter : capture d’écran d’un test API (curl ou Postman) : création d’item, liste, upload fichier.]*
-
-### 2.4 Connexion au stockage et CRUD
-
-- **Lecture/écriture/suppression** : le backend utilise `AZURE_STORAGE_CONNECTION_STRING` et `AZURE_STORAGE_CONTAINER_NAME` ; les fichiers sont stockés sous le préfixe `items/<id>/`. Conteneur en accès privé ; seules les requêtes API accèdent au stockage.
-
-*[À compléter : capture du portail Azure (Storage account → Containers → flask-files) après un upload.]*
-
-### 2.5 Automatisation (Terraform + Ansible)
-
-- **Variables** : `variables.tf` pour la déclaration ; `terraform.tfvars` (non versionné) pour les valeurs sensibles.
-- **Outputs** : `vm_public_ip`, `app_url`, `flask_url`, `ssh_command`, `storage_account_name`, `resource_group_name`.
-- **Ansible** : après création de la VM, un `null_resource` lance `bootstrap.yml` puis `deploy.yml`. Rôles : `common`, `docker`, `deploy-stack` (clone repo, `.env`, `docker compose up`).
-
-*[À compléter : capture d’écran du déploiement Ansible ou de la VM avec `docker ps`.]*
-
-### 2.6 CI/CD — GitHub Actions
-
-- **Workflow** : déclenché sur push sur `main`, connexion SSH à la VM, `cd ~/app && ./deploy.sh` (git pull + docker compose up -d --build).
-- **Secrets** : `VM_HOST`, `VM_USERNAME`, `VM_SSH_PRIVATE_KEY`.
-
-*[À compléter : capture d’écran de l’onglet Actions montrant un run réussi.]*
-
----
-
-## 3. Tests effectués
-
-### 3.1 Accès à l’application
+Affiche les ressources qui vont etre creees.
 
 ```bash
-export VM_IP=$(terraform output -raw vm_public_ip)   # depuis infra/terraform
-curl -s "http://$VM_IP:5000/health"   # Attendu : {"status":"ok"}
+terraform plan
 ```
 
-### 3.2 CRUD et stockage
+Ressources creees :
+- Resource Group
+- VNet + Subnet
+- IP publique statique
+- NSG (ports 22, 80, 5000)
+- VM Ubuntu 22.04
+- Storage Account + Container Blob
+
+![terraform plan](./images/terraform%20plan.png)
+
+### 2.3 Terraform apply
+
+Cree toutes les ressources Azure puis lance Ansible automatiquement.
 
 ```bash
-# Créer un item
-curl -s -X POST "http://$VM_IP:5000/api/items" \
+terraform apply
+```
+
+![terraform apply](./images/terraform%20apply.png)
+
+### 2.4 Outputs
+
+```bash
+terraform output
+```
+
+![terraform output](./images/terraform%20output.png)
+
+## 3. Verification du deploiement
+
+### 3.1 Portail Azure
+
+![Portail Azure](./images/Portail%20Azure.png)
+
+### 3.2 Health check
+
+```bash
+curl http://<IP>:5000/health
+```
+
+![Curl health](./images/Curl%20http.png)
+
+### 3.3 API — CRUD Items
+
+```bash
+curl -X POST http://<IP>:5000/api/items \
   -H "Content-Type: application/json" \
-  -d '{"title": "Test", "description": "Item test"}'
+  -d '{"title":"Test","description":"Premier item"}'
 
-# Lister les items
-curl -s "http://$VM_IP:5000/api/items"
-
-# Upload d’un fichier (remplacer <ID> par l’id retourné)
-curl -s -X POST "http://$VM_IP:5000/api/items/<ID>/files" -F "file=@/chemin/vers/image.png"
+curl http://<IP>:5000/api/items
 ```
 
-Vérifier dans le portail Azure que le conteneur `flask-files` contient un blob sous `items/<ID>/...`.
+![CRUD item](./images/CRUD%20item.png)
 
-*[À compléter : résumé des résultats (réponses JSON, codes HTTP) et captures.]*
+### 3.4 API — Digits de l'horloge
 
----
-
-## 4. Problèmes rencontrés et résolution
-
-| Problème | Cause / analyse | Solution |
-|----------|------------------|----------|
-| Ansible « Permission denied » (SSH) | Clé SSH non trouvée ou mauvaise permission | Vérifier ssh_private_key_path et chmod 0600 sur la clé privée |
-| Clone Git échoue sur la VM | Deploy key absente ou sans accès en écriture | Ajouter la clé publique en Deploy key (Allow write access) |
-| GitHub Actions échoue (SSH) | Secrets incorrects ou IP obsolète | Vérifier VM_HOST, VM_USERNAME, VM_SSH_PRIVATE_KEY |
-| Quota ou SKU non disponible | Région ou taille de VM non disponible | Changer location ou vm_size dans terraform.tfvars |
-| Blob « not configured » (503) | Variables Blob manquantes | Vérifier .env : AZURE_STORAGE_CONNECTION_STRING et AZURE_STORAGE_CONTAINER_NAME |
-
-*[À compléter : problèmes spécifiques que vous avez rencontrés.]*
-
----
-
-## 5. Conclusion
-
-- **Livrables** : infrastructure Terraform (VM, réseau, Blob, NSG), backend Flask avec CRUD et Blob, PostgreSQL dans Docker, provisioning Ansible, CI/CD GitHub Actions.
-- **Améliorations possibles** : HTTPS (reverse proxy + certificat), base managée Azure (Azure Database for PostgreSQL), monitoring (Azure Monitor, logs), sauvegarde du volume PostgreSQL.
-
----
-
-## 6. Rendu du projet
-
-### 6.1 Contenu du dépôt GitHub
-
-- [ ] Code Terraform (`infra/terraform/*.tf`)
-- [ ] README.md (installation et utilisation)
-- [ ] Script de provisioning (Ansible : `infra/ansible/`)
-- [ ] Code du backend et instructions (`services/backend/`, `deploy.sh`, `docs/TESTS.md`)
-- [ ] Script de test : `scripts/test-api.sh` (validation health + CRUD après déploiement)
-
-### 6.2 Captures d’écran à joindre dans le rapport
-
-| # | Description | Où l’insérer |
-|---|-------------|--------------|
-| 1 | Structure des fichiers Terraform ou sortie de `terraform init` / `terraform validate` | § 2.1 |
-| 2 | Sortie de `terraform plan` ou `terraform apply` (résumé) et `terraform output` | § 2.2 |
-| 3 | Test API : création d’item, liste, upload fichier (curl ou Postman) | § 2.3 |
-| 4 | Portail Azure : conteneur Blob `flask-files` avec un ou plusieurs blobs | § 2.4 |
-| 5 | Déploiement Ansible (sortie playbook) ou `docker ps` sur la VM | § 2.5 |
-| 6 | GitHub Actions : onglet Actions, run réussi du workflow « Deploy to Azure VM » | § 2.6 |
-
-**Commande de validation automatique** (à exécuter après déploiement, depuis la racine du repo) :
 ```bash
-./scripts/test-api.sh $(cd infra/terraform && terraform output -raw vm_public_ip)
+curl http://<IP>:5000/api/clock/digits
 ```
 
----
+![Digits de l'horloge](./images/Digits%20de%20l'horloge.png)
 
-*Rapport à compléter avec vos captures d’écran et commentaires après déploiement et tests.*
+### 3.5 Frontend
+
+Ouvrir `http://<IP>` dans le navigateur.
+
+![Frontend](./images/frontend.png)
+
+### 3.6 SSH
+
+```bash
+ssh <user>@<IP>
+docker ps
+```
+
+![SSH](./images/ssh.png)
+
+## 4. Destruction
+
+```bash
+terraform destroy
+```
+
+![terraform destroy](./images/terraform%20destroy.png)
+
+## 5. Problemes rencontres et solutions
+
+| # | Probleme | Cause | Solution |
+|---|----------|-------|----------|
+| 1 | `SkuNotAvailable` | VM non disponible dans `germanywestcentral` | Changement de region vers `swedencentral` |
+| 2 | 404 apres creation de ressources | API Azure "eventually consistent" | Ajout `time_sleep` 30s apres le Resource Group |
+| 3 | `permission denied` docker socket | Groupe docker pas encore actif dans la session SSH | `meta: reset_connection` dans le role Ansible docker |
+| 4 | Variables Postgres vides | Docker Compose ne lisait pas le `.env` a la racine | Ajout `--env-file .env` a la commande docker compose |
+| 5 | Ansible bloque sur passphrase SSH | Cle SSH avec mot de passe | Regeneration de la cle sans passphrase |
+
+## 6. Synthese
+
+Le projet automatise entierement le deploiement :
+
+```
+terraform apply
+   |-- Cree les ressources Azure (VM, reseau, stockage)
+   |-- Lance Ansible
+   |      |-- Installe Docker
+   |      |-- Clone le repo
+   |      |-- Genere le .env
+   |      |-- Lance docker compose
+   |      |-- Verifie que tout repond
+   |-- Affiche les URLs
+
+terraform destroy
+   |-- Supprime tout
+```
+
+Reproductible : n'importe qui peut cloner le repo, remplir `terraform.tfvars`, et obtenir l'application en 5 minutes.
