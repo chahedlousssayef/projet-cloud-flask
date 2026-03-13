@@ -5,6 +5,17 @@
     state: present
     update_cache: true
 
+- name: Check if app_home is a git repo
+  stat:
+    path: "{{ app_home }}/.git"
+  register: git_dir
+
+- name: Clean app_home if not a git repo
+  file:
+    path: "{{ app_home }}"
+    state: absent
+  when: not git_dir.stat.exists
+
 - name: Clone or update repository
   git:
     repo: "{{ repo_url }}"
@@ -22,16 +33,10 @@
     mode: "0600"
 
 - name: Deploy with Docker Compose
-  community.docker.docker_compose_v2:
-    project_src: "{{ app_home }}/infra/docker"
-    project_name: flask
-    compose_files:
-      - compose.prod.yml
-    state: present
-    build: always
+  command: docker compose --env-file .env -f infra/docker/compose.prod.yml up -d --build
+  args:
+    chdir: "{{ app_home }}"
   become_user: "{{ ansible_user }}"
-  environment:
-    DOCKER_HOST: unix:///var/run/docker.sock
   register: compose_result
 
 - name: Ensure deploy script is executable

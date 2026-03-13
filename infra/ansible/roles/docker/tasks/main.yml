@@ -32,6 +32,9 @@
     groups: docker
     append: true
 
+- name: Reset SSH connection so docker group takes effect
+  meta: reset_connection
+
 - name: Install Docker Compose plugin
   apt:
     name: docker-compose-plugin
