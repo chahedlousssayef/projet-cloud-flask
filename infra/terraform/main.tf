@@ -88,9 +88,15 @@ resource "azurerm_network_interface" "nic" {
   }
 }
 
+resource "time_sleep" "wait_for_nic" {
+  depends_on      = [azurerm_network_interface.nic]
+  create_duration = "10s"
+}
+
 resource "azurerm_network_interface_security_group_association" "nic_nsg" {
   network_interface_id      = azurerm_network_interface.nic.id
   network_security_group_id = azurerm_network_security_group.nsg.id
+  depends_on                = [time_sleep.wait_for_nic]
 }
 
 resource "azurerm_linux_virtual_machine" "vm" {
