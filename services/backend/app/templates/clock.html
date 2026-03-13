@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Image Clock</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    min-height:100vh;display:flex;flex-direction:column;align-items:center;
+    justify-content:flex-start;padding:40px 20px;
+    background:#0f0f1a;color:#e0e0e0;font-family:'Segoe UI',system-ui,sans-serif;
+  }
+  h1{font-size:2rem;font-weight:300;letter-spacing:.15em;margin-bottom:8px;color:#fff}
+  .subtitle{font-size:.85rem;color:#888;margin-bottom:40px}
+
+  /* Clock display */
+  .clock-container{
+    display:flex;align-items:center;gap:6px;
+    padding:30px 50px;border-radius:24px;
+    background:linear-gradient(145deg,#1a1a2e,#16162a);
+    box-shadow:0 20px 60px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.05);
+    margin-bottom:50px;position:relative;overflow:hidden;
+  }
+  .clock-container::before{
+    content:'';position:absolute;inset:0;border-radius:24px;
+    background:linear-gradient(135deg,rgba(99,102,241,.08),transparent 60%);pointer-events:none;
+  }
+  .digit-slot{
+    width:100px;height:140px;display:flex;align-items:center;justify-content:center;
+    border-radius:14px;background:rgba(255,255,255,.03);
+    border:1px solid rgba(255,255,255,.06);position:relative;overflow:hidden;
+    transition:transform .15s,box-shadow .15s;
+  }
+  .digit-slot:hover{transform:scale(1.03);box-shadow:0 4px 20px rgba(99,102,241,.15)}
+  .digit-slot .fallback{
+    font-size:5rem;font-weight:200;color:#6366f1;
+    font-variant-numeric:tabular-nums;line-height:1;
+    text-shadow:0 0 30px rgba(99,102,241,.4);
+  }
+  .digit-slot img{
+    width:100%;height:100%;object-fit:cover;border-radius:12px;
+    display:none;
+  }
+  .digit-slot img.loaded{display:block}
+  .digit-slot img.loaded+.fallback{display:none}
+
+  .colon-slot{
+    display:flex;flex-direction:column;gap:14px;padding:0 4px;
+  }
+  .colon-dot{
+    width:14px;height:14px;border-radius:50%;
+    background:#6366f1;box-shadow:0 0 12px rgba(99,102,241,.6);
+    animation:pulse 1s ease-in-out infinite alternate;
+  }
+  @keyframes pulse{0%{opacity:1}100%{opacity:.3}}
+
+  /* Upload grid */
+  .upload-section{
+    width:100%;max-width:720px;
+  }
+  .upload-section h2{
+    font-size:1.1rem;font-weight:400;margin-bottom:20px;color:#aaa;
+    text-align:center;letter-spacing:.05em;
+  }
+  .digit-grid{
+    display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:14px;
+  }
+  .digit-card{
+    background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);
+    border-radius:14px;padding:14px;display:flex;flex-direction:column;
+    align-items:center;gap:10px;cursor:pointer;position:relative;
+    transition:all .2s;
+  }
+  .digit-card:hover{
+    background:rgba(99,102,241,.1);border-color:rgba(99,102,241,.3);
+    transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.3);
+  }
+  .digit-card .label{
+    font-size:1.6rem;font-weight:300;color:#6366f1;
+  }
+  .digit-card .thumb{
+    width:60px;height:60px;border-radius:10px;object-fit:cover;
+    background:rgba(255,255,255,.03);border:1px dashed rgba(255,255,255,.1);
+    display:flex;align-items:center;justify-content:center;overflow:hidden;
+  }
+  .digit-card .thumb img{width:100%;height:100%;object-fit:cover;border-radius:9px}
+  .digit-card .thumb .placeholder{font-size:.7rem;color:#555;text-align:center}
+  .digit-card input[type=file]{display:none}
+  .digit-card .actions{display:flex;gap:6px;width:100%}
+  .btn{
+    flex:1;padding:6px 0;border:none;border-radius:8px;font-size:.7rem;
+    cursor:pointer;transition:all .15s;font-weight:500;letter-spacing:.03em;
+  }
+  .btn-upload{background:#6366f1;color:#fff}
+  .btn-upload:hover{background:#818cf8}
+  .btn-delete{background:rgba(239,68,68,.15);color:#ef4444}
+  .btn-delete:hover{background:rgba(239,68,68,.3)}
+
+  .toast{
+    position:fixed;bottom:30px;left:50%;transform:translateX(-50%) translateY(100px);
+    background:#1e1e36;color:#e0e0e0;padding:12px 28px;border-radius:12px;
+    font-size:.85rem;box-shadow:0 10px 30px rgba(0,0,0,.5);
+    border:1px solid rgba(99,102,241,.2);
+    transition:transform .3s cubic-bezier(.175,.885,.32,1.275);z-index:99;
+  }
+  .toast.show{transform:translateX(-50%) translateY(0)}
+
+  @media(max-width:600px){
+    .digit-slot{width:50px;height:70px;border-radius:8px}
+    .digit-slot .fallback{font-size:2.4rem}
+    .clock-container{padding:18px 20px;gap:4px;border-radius:16px}
+    .colon-dot{width:8px;height:8px}
+  }
+</style>
+</head>
+<body>
+
+<h1>IMAGE CLOCK</h1>
+<p class="subtitle">Upload des images pour personnaliser chaque chiffre de l'horloge</p>
+
+<div class="clock-container" id="clock">
+  <div class="digit-slot" data-pos="h1"><img><span class="fallback">0</span></div>
+  <div class="digit-slot" data-pos="h2"><img><span class="fallback">0</span></div>
+  <div class="colon-slot"><div class="colon-dot"></div><div class="colon-dot"></div></div>
+  <div class="digit-slot" data-pos="m1"><img><span class="fallback">0</span></div>
+  <div class="digit-slot" data-pos="m2"><img><span class="fallback">0</span></div>
+  <div class="colon-slot"><div class="colon-dot"></div><div class="colon-dot"></div></div>
+  <div class="digit-slot" data-pos="s1"><img><span class="fallback">0</span></div>
+  <div class="digit-slot" data-pos="s2"><img><span class="fallback">0</span></div>
+</div>
+
+<div class="upload-section">
+  <h2>Personnaliser les chiffres</h2>
+  <div class="digit-grid" id="digitGrid"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const DIGITS = ['0','1','2','3','4','5','6','7','8','9'];
+const digitImages = {};
+const grid = document.getElementById('digitGrid');
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+function buildGrid() {
+  DIGITS.forEach(d => {
+    const card = document.createElement('div');
+    card.className = 'digit-card';
+    card.innerHTML = `
+      <span class="label">${d}</span>
+      <div class="thumb" id="thumb-${d}"><span class="placeholder">Aucune<br>image</span></div>
+      <input type="file" accept="image/*" id="input-${d}">
+      <div class="actions">
+        <button class="btn btn-upload" onclick="document.getElementById('input-${d}').click()">Choisir</button>
+        <button class="btn btn-delete" onclick="deleteDigit('${d}')">Supprimer</button>
+      </div>`;
+    card.querySelector('input').addEventListener('change', e => uploadDigit(d, e.target));
+    grid.appendChild(card);
+  });
+}
+
+async function loadDigits() {
+  try {
+    const res = await fetch('/api/clock/digits');
+    const data = await res.json();
+    data.forEach(item => {
+      digitImages[item.digit] = `/api/clock/digits/${item.digit}/image?t=${Date.now()}`;
+      updateThumb(item.digit);
+    });
+  } catch(e) { console.error('Could not load digits', e); }
+}
+
+function updateThumb(digit) {
+  const thumb = document.getElementById(`thumb-${digit}`);
+  if (!thumb) return;
+  if (digitImages[digit]) {
+    thumb.innerHTML = `<img src="${digitImages[digit]}">`;
+  } else {
+    thumb.innerHTML = `<span class="placeholder">Aucune<br>image</span>`;
+  }
+}
+
+async function uploadDigit(digit, input) {
+  if (!input.files.length) return;
+  const fd = new FormData();
+  fd.append('image', input.files[0]);
+  try {
+    const res = await fetch(`/api/clock/digits/${digit}`, { method: 'POST', body: fd });
+    if (!res.ok) throw new Error(await res.text());
+    digitImages[digit] = `/api/clock/digits/${digit}/image?t=${Date.now()}`;
+    updateThumb(digit);
+    toast(`Image du chiffre ${digit} mise à jour`);
+  } catch(e) {
+    toast('Erreur: ' + e.message);
+  }
+  input.value = '';
+}
+
+async function deleteDigit(digit) {
+  try {
+    const res = await fetch(`/api/clock/digits/${digit}`, { method: 'DELETE' });
+    if (!res.ok && res.status !== 204) throw new Error('Erreur suppression');
+    delete digitImages[digit];
+    updateThumb(digit);
+    toast(`Image du chiffre ${digit} supprimée`);
+  } catch(e) {
+    toast('Erreur: ' + e.message);
+  }
+}
+
+function updateClock() {
+  const now = new Date();
+  const h = String(now.getHours()).padStart(2, '0');
+  const m = String(now.getMinutes()).padStart(2, '0');
+  const s = String(now.getSeconds()).padStart(2, '0');
+  const digits = [h[0], h[1], m[0], m[1], s[0], s[1]];
+  const positions = ['h1','h2','m1','m2','s1','s2'];
+
+  positions.forEach((pos, i) => {
+    const slot = document.querySelector(`[data-pos="${pos}"]`);
+    const fallback = slot.querySelector('.fallback');
+    const img = slot.querySelector('img');
+    const d = digits[i];
+
+    fallback.textContent = d;
+    if (digitImages[d]) {
+      img.src = digitImages[d];
+      img.classList.add('loaded');
+    } else {
+      img.classList.remove('loaded');
+      img.removeAttribute('src');
+    }
+  });
+}
+
+buildGrid();
+loadDigits().then(() => {
+  updateClock();
+  setInterval(updateClock, 1000);
+});
+</script>
+</body>
+</html>

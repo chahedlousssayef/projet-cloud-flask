@@ -4,12 +4,19 @@ resource "azurerm_resource_group" "rg" {
   location = var.location
 }
 
+# Attente pour la propagation Azure API
+resource "time_sleep" "wait_for_rg" {
+  depends_on      = [azurerm_resource_group.rg]
+  create_duration = "30s"
+}
+
 # Réseau virtuel
 resource "azurerm_virtual_network" "vnet" {
   name                = "vnet-flask-app"
   address_space       = ["10.0.0.0/16"]
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
+  depends_on          = [time_sleep.wait_for_rg]
 }
 
 # Subnet
@@ -27,6 +34,7 @@ resource "azurerm_public_ip" "pip" {
   resource_group_name = azurerm_resource_group.rg.name
   allocation_method   = "Static"
   sku                 = "Standard"
+  depends_on          = [time_sleep.wait_for_rg]
 }
 
 # Groupe de sécurité réseau (NSG)
@@ -34,6 +42,7 @@ resource "azurerm_network_security_group" "nsg" {
   name                = "nsg-flask-app"
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
+  depends_on          = [time_sleep.wait_for_rg]
 
   security_rule {
     name                       = "SSH"
@@ -124,33 +133,28 @@ resource "azurerm_linux_virtual_machine" "vm" {
 
 # Stockage Azure Blob
 resource "azurerm_storage_account" "storage" {
-  name                     = var.storage_account_name
-  resource_group_name      = azurerm_resource_group.rg.name
-  location                 = azurerm_resource_group.rg.location
-  account_tier             = "Standard"
-  account_replication_type  = "LRS"
-  min_tls_version          = "TLS1_2"
+  name                            = var.storage_account_name
+  resource_group_name             = azurerm_resource_group.rg.name
+  location                        = azurerm_resource_group.rg.location
+  account_tier                    = "Standard"
+  account_replication_type        = "LRS"
+  min_tls_version                 = "TLS1_2"
   allow_nested_items_to_be_public = false
+  depends_on                      = [time_sleep.wait_for_rg]
 }
 
 resource "azurerm_storage_container" "container" {
   name                  = var.storage_container_name
-  storage_account_name  = azurerm_storage_account.storage.name
+  storage_account_id    = azurerm_storage_account.storage.id
   container_access_type = "private"
-}
-
-# Données pour Ansible (inventaire)
-data "template_file" "inventory" {
-  template = file("${path.module}/templates/inventory.tpl")
-  vars = {
-    vm_public_ip = azurerm_linux_virtual_machine.vm.public_ip_address
-    admin_user   = var.admin_username
-  }
 }
 
 # Fichier inventory généré (optionnel, pour Ansible local)
 resource "local_file" "inventory" {
-  content  = data.template_file.inventory.rendered
+  content = templatefile("${path.module}/templates/inventory.tpl", {
+    vm_public_ip = azurerm_linux_virtual_machine.vm.public_ip_address
+    admin_user   = var.admin_username
+  })
   filename = "${path.module}/../ansible/inventory/hosts.yml"
 }
 

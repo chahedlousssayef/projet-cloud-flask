@@ -1,13 +1,9 @@
 ---
-- name: Copy SSH key for Git from control node
-  copy:
-    content: "{{ lookup('file', ssh_private_key_path) }}"
-    dest: "{{ app_home }}/.ssh/id_rsa"
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
-    mode: "0600"
-  when: ssh_private_key_path is defined
-  no_log: true
+- name: Install git
+  apt:
+    name: git
+    state: present
+    update_cache: true
 
 - name: Clone or update repository
   git:
@@ -15,10 +11,7 @@
     dest: "{{ app_home }}"
     version: "{{ repo_branch }}"
     force: true
-    key_file: "{{ app_home }}/.ssh/id_rsa"
   become_user: "{{ ansible_user }}"
-  environment:
-    GIT_SSH_COMMAND: "ssh -o StrictHostKeyChecking=no"
 
 - name: Generate .env file for production
   template:
@@ -45,3 +38,23 @@
   file:
     path: "{{ app_home }}/deploy.sh"
     mode: "0755"
+
+- name: Wait for backend to be healthy
+  uri:
+    url: "http://localhost:5000/health"
+    method: GET
+    status_code: 200
+  register: health_result
+  retries: 12
+  delay: 5
+  until: health_result.status == 200
+
+- name: Wait for frontend to be ready
+  uri:
+    url: "http://localhost:80"
+    method: GET
+    status_code: 200
+  register: frontend_result
+  retries: 6
+  delay: 5
+  until: frontend_result.status == 200

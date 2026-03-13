@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Image Clock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Nav -->
+<nav class="navbar">
+  <div class="nav-brand">
+    <div class="nav-logo">🕐</div>
+    <span>Image Clock</span>
+  </div>
+  <div class="nav-links">
+    <a href="#clock-section" class="active">Horloge</a>
+    <a href="#upload-section">Personnaliser</a>
+    <a href="#api-section">API</a>
+  </div>
+  <div class="nav-status" id="statusDot" title="Connexion au backend...">
+    <span class="dot offline"></span>
+    <span class="status-text">Hors ligne</span>
+  </div>
+</nav>
+
+<!-- Hero / Clock -->
+<section class="hero" id="clock-section">
+  <div class="hero-bg"></div>
+  <div class="hero-content">
+    <h1 class="hero-title">Image Clock</h1>
+    <p class="hero-sub">Remplace chaque chiffre de l'horloge par tes propres images, stockées sur Azure Blob Storage</p>
+
+    <div class="clock-container" id="clock">
+      <div class="digit-slot" data-pos="h1"><img alt=""><span class="fallback">0</span></div>
+      <div class="digit-slot" data-pos="h2"><img alt=""><span class="fallback">0</span></div>
+      <div class="colon-slot"><div class="colon-dot"></div><div class="colon-dot"></div></div>
+      <div class="digit-slot" data-pos="m1"><img alt=""><span class="fallback">0</span></div>
+      <div class="digit-slot" data-pos="m2"><img alt=""><span class="fallback">0</span></div>
+      <div class="colon-slot"><div class="colon-dot"></div><div class="colon-dot"></div></div>
+      <div class="digit-slot" data-pos="s1"><img alt=""><span class="fallback">0</span></div>
+      <div class="digit-slot" data-pos="s2"><img alt=""><span class="fallback">0</span></div>
+    </div>
+
+    <div class="clock-date" id="clockDate"></div>
+  </div>
+</section>
+
+<!-- Upload Section -->
+<section class="section" id="upload-section">
+  <div class="container">
+    <div class="section-header">
+      <h2>Personnaliser les chiffres</h2>
+      <p>Clique sur un chiffre pour uploader une image. Les images sont stockées sur Azure Blob Storage.</p>
+    </div>
+
+    <div class="digit-grid" id="digitGrid"></div>
+  </div>
+</section>
+
+<!-- API Info -->
+<section class="section section-dark" id="api-section">
+  <div class="container">
+    <div class="section-header">
+      <h2>API Endpoints</h2>
+      <p>L'application expose une API REST pour gérer les images des chiffres et les items CRUD.</p>
+    </div>
+
+    <div class="api-grid">
+      <div class="api-card">
+        <div class="api-method get">GET</div>
+        <div class="api-info">
+          <code>/api/clock/digits</code>
+          <span>Liste les chiffres avec image</span>
+        </div>
+      </div>
+      <div class="api-card">
+        <div class="api-method post">POST</div>
+        <div class="api-info">
+          <code>/api/clock/digits/{digit}</code>
+          <span>Upload une image pour un chiffre</span>
+        </div>
+      </div>
+      <div class="api-card">
+        <div class="api-method get">GET</div>
+        <div class="api-info">
+          <code>/api/clock/digits/{digit}/image</code>
+          <span>Récupère l'image d'un chiffre</span>
+        </div>
+      </div>
+      <div class="api-card">
+        <div class="api-method delete">DEL</div>
+        <div class="api-info">
+          <code>/api/clock/digits/{digit}</code>
+          <span>Supprime l'image d'un chiffre</span>
+        </div>
+      </div>
+      <div class="api-card">
+        <div class="api-method get">GET</div>
+        <div class="api-info">
+          <code>/api/items</code>
+          <span>Liste tous les items</span>
+        </div>
+      </div>
+      <div class="api-card">
+        <div class="api-method post">POST</div>
+        <div class="api-info">
+          <code>/api/items</code>
+          <span>Crée un nouvel item</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer class="footer">
+  <p>Image Clock &mdash; Flask + Azure Blob Storage &mdash; Projet Cloud</p>
+</footer>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

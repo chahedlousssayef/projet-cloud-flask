@@ -131,6 +131,14 @@ curl http://$(terraform output -raw vm_public_ip):5000/api/items
 terraform destroy
 ```
 
+Répondre `yes` à la confirmation.
+
+**Valider le déploiement** (depuis la racine du repo) :
+```bash
+./scripts/test-api.sh $(cd infra/terraform && terraform output -raw vm_public_ip)
+```
+Voir aussi **[docs/TESTS.md](docs/TESTS.md)** pour les commandes de test détaillées (CRUD, Blob, santé).
+
 ## Déploiement local (dev)
 
 ```bash
@@ -166,6 +174,10 @@ docker compose -f infra/docker/compose.prod.yml up --build
 ├── .github/workflows/
 │   └── deploy.yml             # CI/CD GitHub Actions
 ├── deploy.sh                  # Script de déploiement (VM + Actions)
+├── docs/
+│   └── TESTS.md               # Commandes de test manuelles (curl)
+├── scripts/
+│   └── test-api.sh            # Script de validation (health + CRUD)
 ├── .env.example
 └── README.md
 ```

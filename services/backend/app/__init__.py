@@ -1,8 +1,9 @@
+import os
 from flask import Flask
 from flask_cors import CORS
 
 def create_app():
-    app = Flask(__name__)
+    app = Flask(__name__, template_folder=os.path.join(os.path.dirname(__file__), "templates"))
     app.config.from_prefixed_env()
     CORS(app)
     from .routes import register_routes
